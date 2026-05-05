@@ -1,0 +1,36 @@
+# Security & Credentials
+*.json
+.env
+ServiceAccountKey.json
+
+# Databases
+*.db
+*.sqlite3
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.iml
+
+# Flutter / Dart Build Files
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Python / Backend
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+
+# Logs
+*.log
+hs_err_pid*.log
+replay_pid*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

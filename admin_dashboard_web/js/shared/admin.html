@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HawkEye - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+        }
+
+        .status-tag {
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-safe {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .status-emergency {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        #map {
+            height: 100%;
+            border-radius: 0.5rem;
+            z-index: 1;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.2;
+            }
+        }
+
+        .blink-circle {
+            animation: blink 1.5s infinite;
+        }
+
+        .modal-backdrop {
+            z-index: 40;
+        }
+
+        .modal {
+            z-index: 50;
+        }
+
+        .header-stat-card {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            background-color: #f0f4f8;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin-right: 0.75rem;
+        }
+
+        .header-stat-card i {
+            font-size: 1.5rem;
+            margin-right: 0.75rem;
+        }
+
+        .header-stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .header-stat-card .label {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .progress-bar {
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            overflow: hidden;
+            height: 0.75rem;
+        }
+
+        .progress-bar-inner {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="antialiased text-gray-800">
+    <audio id="alert-sound" src="https://www.soundjay.com/buttons/sounds/button-7.mp3" preload="auto"></audio>
+
+    <div class="flex h-screen bg-gray-50 flex-col">
+        <header class="bg-white shadow-sm z-20 border-b border-gray-200 flex-shrink-0">
+            <div class="container mx-auto px-6 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="bg-gray-800 text-white p-2 rounded-md mr-4"><i class="fas fa-shield-alt fa-lg"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-gray-800">HawkEye Admin Dashboard</h1>
+                            <p class="text-sm text-gray-500">Tourist Safety Management Center</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="header-stat-card"><i class="fas fa-users text-blue-500"></i>
+                            <div>
+                                <p id="total-tourists-count" class="value text-blue-600">0</p>
+                                <p class="label">Total Tourists</p>
+                            </div>
+                        </div>
+                        <div class="header-stat-card"><i class="fas fa-triangle-exclamation text-red-500"></i>
+                            <div>
+                                <p id="active-alerts-count" class="value text-red-600">0</p>
+                                <p class="label">Active Alerts</p>
+                            </div>
+                        </div>
+                        <span
+                            class="flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold"><i
+                                class="fas fa-check-circle mr-2"></i>System Online</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 flex gap-6 p-6 overflow-hidden">
+            <div class="w-2/3 flex-shrink-0 flex flex-col">
+                <div class="card flex-1 flex flex-col">
+                    <div class="p-4 border-b flex-shrink-0">
+                        <h2 class="text-lg font-bold">Real-time Alert Map</h2>
+                    </div>
+                    <div class="p-2 flex-grow">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-1/3 flex flex-col gap-6 overflow-y-auto">
+                <div id="critical-alert-banner"
+                    class="hidden bg-red-600 text-white p-4 rounded-lg flex-shrink-0 flex items-center justify-between shadow-lg gap-4">
+                    <div class="flex items-center min-w-0">
+                        <i class="fas fa-exclamation-triangle fa-2x mr-4 flex-shrink-0"></i>
+                        <div class="truncate">
+                            <p class="font-bold text-lg">CRITICAL: <span id="critical-banner-text"></span></p>
+                            <p class="text-sm">Immediate action required.</p>
+                        </div>
+                    </div>
+                    <div><button id="acknowledge-banner-btn"
+                            class="bg-white text-red-600 font-bold py-2 px-4 rounded-md hover:bg-red-100 transition flex-shrink-0">Acknowledge</button>
+                    </div>
+                </div>
+
+                <div class="card flex-shrink-0">
+                    <div class="p-4 border-b">
+                        <h2 class="text-lg font-bold">Active Alerts</h2>
+                    </div>
+                    <div id="alerts-feed" class="p-4 space-y-3">
+                        <div class="text-gray-500 text-center p-4">Loading alerts...</div>
+                    </div>
+                </div>
+
+                <div class="card flex-shrink-0">
+                    <div class="p-4 border-b">
+                        <h2 class="text-lg font-bold">Tourist Management</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3">Tourist</th>
+                                    <th scope="col" class="px-6 py-3">Status</th>
+                                    <th scope="col" class="px-6 py-3">Location</th>
+                                    <th scope="col" class="px-6 py-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tourist-table-body">
+                                <tr>
+                                    <td colspan="4" class="text-center p-8 text-gray-500">Loading tourist data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card p-4 flex-shrink-0">
+                    <h2 class="text-lg font-bold mb-4">System Analytics</h2>
+                    <div class="space-y-4 text-sm">
+                        <div>
+                            <div class="flex justify-between items-center mb-1"><span>Response Time</span><span
+                                    id="response-time-value" class="font-bold text-blue-600">...</span></div>
+                            <div class="progress-bar">
+                                <div id="response-time-bar" class="progress-bar-inner bg-blue-500" style="width: 0%;">
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center mb-1"><span>Alert Resolution Rate</span><span
+                                    id="resolution-rate-value" class="font-bold text-green-600">...</span></div>
+                            <div class="progress-bar">
+                                <div id="resolution-rate-bar" class="progress-bar-inner bg-green-500"
+                                    style="width: 0%;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center mb-1"><span>Tourist Satisfaction</span><span
+                                    id="satisfaction-value" class="font-bold text-yellow-500">...</span></div>
+                            <div class="progress-bar">
+                                <div id="satisfaction-bar" class="progress-bar-inner bg-yellow-400" style="width: 0%;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card p-4 flex-shrink-0">
+                    <h2 class="text-lg font-bold mb-3">Quick Actions</h2>
+                    <div class="flex flex-col space-y-2">
+                        <button data-action="broadcast"
+                            class="quick-action-btn w-full flex items-center py-2 px-4 rounded-md font-semibold text-white bg-red-600 hover:bg-red-700 transition"><i
+                                class="fas fa-bullhorn w-6 mr-2"></i>Emergency Broadcast</button>
+                        <button data-action="safety-alert"
+                            class="quick-action-btn w-full flex items-center py-2 px-4 rounded-md font-semibold border hover:bg-gray-100 transition"><i
+                                class="fas fa-bell w-6 mr-2"></i>Send Safety Alert</button>
+                        <button id="draw-geofence-btn"
+                            class="quick-action-btn w-full flex items-center py-2 px-4 rounded-md font-semibold border hover:bg-gray-100 transition"><i
+                                class="fas fa-draw-polygon w-6 mr-2"></i>Geofence Tools</button>
+                        <label for="geofence-file-upload"
+                            class="quick-action-btn w-full flex items-center py-2 px-4 rounded-md font-semibold border hover:bg-gray-100 transition cursor-pointer"><i
+                                class="fas fa-upload w-6 mr-2"></i>Upload Geofence File</label>
+                        <input type="file" id="geofence-file-upload" class="hidden" accept=".json">
+                        <button data-action="report"
+                            class="quick-action-btn w-full flex items-center py-2 px-4 rounded-md font-semibold border hover:bg-gray-100 transition"><i
+                                class="fas fa-file-alt w-6 mr-2"></i>Generate Report</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="tourist-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full modal-backdrop">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white modal">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-xl font-bold text-gray-900">Tourist Digital Record</h3><button id="close-tourist-modal"
+                    class="text-gray-400 hover:text-gray-700 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-1"><img id="tourist-modal-photo" src="https://via.placeholder.com/150"
+                        class="rounded-lg shadow-md w-full">
+                    <h4 id="tourist-modal-name" class="text-lg font-bold mt-2"></h4>
+                    <p id="tourist-modal-origin" class="text-sm text-gray-600"></p>
+                    <p id="tourist-modal-id" class="text-xs text-gray-500 mt-1"></p>
+                </div>
+                <div class="md:col-span-2">
+                    <h4 class="font-bold border-b pb-1 mb-2">Last Known Location & Status</h4>
+                    <p id="tourist-modal-location" class="text-sm"></p>
+                    <p class="text-sm">Status: <span id="tourist-modal-status" class="font-semibold"></span></p>
+                    <h4 class="font-bold border-b pb-1 mb-2 mt-4">Alert History</h4>
+                    <ul id="tourist-modal-history" class="space-y-2 text-sm max-h-48 overflow-y-auto"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="action-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full modal-backdrop">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white modal">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 id="action-modal-title" class="text-xl font-bold"></h3>
+                <button id="close-action-modal"
+                    class="text-gray-400 hover:text-gray-700 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="mt-4">
+                <p id="action-modal-prompt" class="text-sm text-gray-600 mb-2"></p>
+                <textarea id="action-modal-input" class="w-full border rounded p-2" rows="4"></textarea>
+                <div id="action-modal-display" class="hidden whitespace-pre-wrap p-2 bg-gray-100 rounded"></div>
+            </div>
+            <div class="mt-4 text-right space-x-2">
+                <button id="action-modal-cancel"
+                    class="px-4 py-2 rounded-md font-semibold border hover:bg-gray-100 transition">Cancel</button>
+                <button id="action-modal-confirm"
+                    class="px-4 py-2 rounded-md font-semibold text-white bg-blue-600 hover:bg-blue-700 transition">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="geofence-modal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full modal-backdrop">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white modal">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-xl font-bold">New Geofence</h3>
+                <button id="close-geofence-modal"
+                    class="text-gray-400 hover:text-gray-700 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="mt-4">
+                <label for="geofence-name" class="block text-sm font-medium text-gray-700">Name:</label>
+                <input type="text" id="geofence-name"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            </div>
+            <div class="mt-4">
+                <label for="geofence-risk" class="block text-sm font-medium text-gray-700">Risk Level:</label>
+                <select id="geofence-risk"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <option value="low">Low</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
+            <div class="mt-4 text-right space-x-2">
+                <button id="geofence-cancel-btn"
+                    class="px-4 py-2 rounded-md font-semibold border hover:bg-gray-100 transition">Cancel</button>
+                <button id="geofence-save-btn"
+                    class="px-4 py-2 rounded-md font-semibold text-white bg-green-600 hover:bg-green-700 transition">Save
+                    Geofence</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, where, doc, updateDoc, orderBy, getDocs, serverTimestamp, limit, getCountFromServer, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // --- CONFIGURATION & INITIALIZATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBD4aHPyrcedXI9UVGJSFDCh7tP6nhBdvM",
+            authDomain: "hawkeye-1dc0a.firebaseapp.com",
+            projectId: "hawkeye-1dc0a",
+            storageBucket: "hawkeye-1dc0a.firebasestorage.app",
+            messagingSenderId: "808927933680",
+            appId: "1:808927933680:web:9b8dec323ed9500db2fe35",
+            measurementId: "G-8SNH34ZD46"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const map = L.map('map');
+        const drawnItems = new L.FeatureGroup();
+        let drawControl = null;
+
+        // --- APPLICATION STATE ---
+        const state = {
+            tourists: {},
+            activeAlerts: [],
+            alertVisuals: {},
+            knownCriticalAlertIds: new Set(),
+            geofences: {},
+            drawingLatLngs: null,
+            drawingType: null
+        };
+        const RISK_COLORS = { 'low': 'green', 'moderate': 'orange', 'high': 'red' };
+
+        // --- ANALYTICS FUNCTIONS ---
+
+        async function calculateAndDisplayAnalytics() {
+            // 1. Response Time
+            try {
+                const responseQuery = query(collection(db, "alerts"), where("acknowledgedTimestamp", "!=", null), orderBy("acknowledgedTimestamp", "desc"), limit(50));
+                const responseSnapshot = await getDocs(responseQuery);
+                let totalResponseTime = 0, acknowledgedCount = 0;
+                responseSnapshot.forEach(doc => {
+                    const alert = doc.data();
+                    if (alert.timestamp && alert.acknowledgedTimestamp) {
+                        totalResponseTime += alert.acknowledgedTimestamp.toMillis() - alert.timestamp.toMillis();
+                        acknowledgedCount++;
+                    }
+                });
+                const avgResponseTime = acknowledgedCount > 0 ? (totalResponseTime / acknowledgedCount / 1000).toFixed(1) : 0;
+                document.getElementById('response-time-value').textContent = `${avgResponseTime}s avg`;
+                const responseTimePercentage = acknowledgedCount > 0 ? Math.min(100, (5 / avgResponseTime) * 100) : 0;
+                document.getElementById('response-time-bar').style.width = `${responseTimePercentage}%`;
+            } catch (e) { console.error("Could not calculate response time:", e); }
+
+            // 2. Alert Resolution Rate
+            try {
+                const resolvedQuery = query(collection(db, "alerts"), where("status", "==", "resolved"));
+                const totalQuery = collection(db, "alerts");
+                const [resolvedSnapshot, totalSnapshot] = await Promise.all([getCountFromServer(resolvedQuery), getCountFromServer(totalQuery)]);
+                const resolvedCount = resolvedSnapshot.data().count;
+                const totalCount = totalSnapshot.data().count;
+                const resolutionRate = totalCount > 0 ? ((resolvedCount / totalCount) * 100).toFixed(0) : 0;
+                document.getElementById('resolution-rate-value').textContent = `${resolutionRate}%`;
+                document.getElementById('resolution-rate-bar').style.width = `${resolutionRate}%`;
+            } catch (e) { console.error("Could not calculate resolution rate:", e); }
+
+            // 3. Tourist Satisfaction
+            try {
+                const satisfactionQuery = query(collection(db, "feedback"), orderBy("timestamp", "desc"), limit(100));
+                const satisfactionSnapshot = await getDocs(satisfactionQuery);
+                let totalRating = 0, feedbackCount = 0;
+                satisfactionSnapshot.forEach(doc => {
+                    const feedback = doc.data();
+                    if (typeof feedback.rating === 'number') {
+                        totalRating += feedback.rating;
+                        feedbackCount++;
+                    }
+                });
+                const avgRating = feedbackCount > 0 ? (totalRating / feedbackCount).toFixed(1) : 0;
+                const satisfactionPercentage = feedbackCount > 0 ? (avgRating / 5) * 100 : 0;
+                document.getElementById('satisfaction-value').textContent = `${avgRating}/5`;
+                document.getElementById('satisfaction-bar').style.width = `${satisfactionPercentage}%`;
+            } catch (e) { console.error("Could not calculate tourist satisfaction:", e); }
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        async function fetchAlertHistory(touristId) {
+            const historyList = document.getElementById('tourist-modal-history');
+            historyList.innerHTML = '<li>Loading history...</li>';
+            try {
+                const q = query(collection(db, "alerts"), where("touristId", "==", touristId), orderBy("timestamp", "desc"));
+                const snapshot = await getDocs(q);
+                historyList.innerHTML = snapshot.empty ? '<li>No previous alerts found.</li>' : snapshot.docs.map(doc => {
+                    const alert = doc.data();
+                    const date = new Date(alert.timestamp?.toMillis()).toLocaleString();
+                    return `<li class="border-b pb-1"><strong>${alert.title}</strong><span class="block text-xs text-gray-500">${date} - Status: ${alert.status}</span></li>`;
+                }).join('');
+            } catch (error) { console.error("Error fetching alert history:", error); historyList.innerHTML = '<li>Could not load history.</li>'; }
+        }
+
+        async function updateAlert(alertId, updates) {
+            try { await updateDoc(doc(db, 'alerts', alertId), updates); }
+            catch (error) { console.error("Error updating alert:", error); alert("Failed to update alert."); }
+        }
+
+        async function saveGeofence(geofenceData) {
+            try {
+                await addDoc(collection(db, "geofences"), geofenceData);
+            } catch (error) {
+                console.error("Error saving geofence:", error);
+                alert("Failed to save geofence.");
+            }
+        }
+
+        // --- RENDER FUNCTIONS ---
+
+        function renderTouristTable() {
+            const touristsInAlert = state.activeAlerts.map(alert => {
+                const touristDetails = state.tourists[alert.touristId];
+                if (touristDetails) {
+                    return { ...touristDetails, status: 'EMERGENCY', location: alert.locationName, lat: alert.lat, lng: alert.lng };
+                } else {
+                    return {
+                        id: alert.touristId,
+                        name: alert.touristName || alert.touristId,
+                        origin: alert.touristName ? `ID: ${alert.touristId}` : "Syncing details...",
+                        status: 'EMERGENCY',
+                        location: alert.locationName,
+                        lat: alert.lat,
+                        lng: alert.lng
+                    };
+                }
+            });
+
+            const uniqueTourists = Object.values(touristsInAlert.reduce((acc, curr) => { acc[curr.id] = curr; return acc; }, {}));
+            const touristTableBody = document.getElementById('tourist-table-body');
+            touristTableBody.innerHTML = '';
+
+            if (uniqueTourists.length === 0) {
+                touristTableBody.innerHTML = `<tr><td colspan="4" class="text-center p-8 text-gray-500">No tourists in an active emergency state.</td></tr>`;
+                return;
+            }
+            uniqueTourists.forEach(tourist => {
+                const row = `<tr class="bg-white border-b hover:bg-gray-50"><td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${tourist.name}<span class="block text-xs text-gray-500">${tourist.origin}</span></td><td class="px-6 py-4"><span class="status-tag status-emergency">${tourist.status}</span></td><td class="px-6 py-4">${tourist.location}</td><td class="px-6 py-4 text-center text-gray-500 space-x-4"><button class="message-btn hover:text-blue-600" data-id="${tourist.id}" title="Message"><i class="fas fa-comment-dots"></i></button><button class="locate-btn hover:text-green-600" data-id="${tourist.id}" title="Locate"><i class="fas fa-map-marker-alt"></i></button><button class="view-btn hover:text-indigo-600" data-id="${tourist.id}" title="View Details"><i class="fas fa-eye"></i></button></td></tr>`;
+                touristTableBody.innerHTML += row;
+            });
+        }
+
+        function renderAlertsFeed() {
+            const alertsFeed = document.getElementById('alerts-feed');
+            alertsFeed.innerHTML = state.activeAlerts.length ? '' : '<div class="text-gray-500 text-center p-4">No active alerts.</div>';
+            state.activeAlerts.sort((a, b) => {
+                if (a.status === 'active' && b.status !== 'active') return -1;
+                if (a.status !== 'active' && b.status === 'active') return 1;
+                return (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0);
+            });
+            state.activeAlerts.forEach(alert => {
+                const touristName = alert.touristName || state.tourists[alert.touristId]?.name || alert.touristId;
+                const cardBg = alert.status === 'active' ? 'bg-red-50' : 'bg-yellow-50';
+                const borderColor = alert.status === 'active' ? 'border-red-500' : 'border-yellow-500';
+                const actionButton = alert.status === 'active' ? `<button data-id="${alert.id}" class="acknowledge-btn mt-2 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-2 py-1 rounded">Acknowledge</button>` : `<button data-id="${alert.id}" class="resolve-btn mt-2 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded">Resolve</button>`;
+                const responseStatusHTML = alert.responseStatus ? `<p class="text-xs font-semibold text-blue-700 mt-1"><i class="fas fa-truck mr-1"></i> ${alert.responseStatus}</p>` : '';
+                alertsFeed.innerHTML += `<div class="p-3 rounded-lg border-l-4 ${borderColor} ${cardBg} cursor-pointer hover:shadow-md transition" data-alert-id="${alert.id}"><p class="font-bold text-sm text-gray-800">${alert.title}</p><p class="text-xs text-gray-600">${touristName} - ${alert.locationName}</p>${responseStatusHTML}<div class="text-right">${actionButton}</div></div>`;
+            });
+        }
+
+        function renderMapVisuals() {
+            Object.values(state.alertVisuals).forEach(v => { map.removeLayer(v.marker); map.removeLayer(v.circle); });
+            Object.keys(state.alertVisuals).forEach(id => delete state.alertVisuals[id]);
+            state.activeAlerts.forEach(alert => {
+                if (alert.lat && typeof alert.lat === 'number' && alert.lng && typeof alert.lng === 'number') {
+                    const touristName = alert.touristName || state.tourists[alert.touristId]?.name || 'Unknown Tourist';
+                    const marker = L.marker([alert.lat, alert.lng]).addTo(map);
+                    marker.bindPopup(`<b>${alert.title}</b><br>${touristName}`);
+                    const circle = L.circle([alert.lat, alert.lng], { radius: 20, color: 'red', fillColor: '#f03', fillOpacity: 0.5, className: alert.status === 'active' ? 'blink-circle' : '' }).addTo(map);
+                    state.alertVisuals[alert.id] = { marker, circle };
+                }
+            });
+            renderGeofences();
+        }
+
+        function renderGeofences() {
+            drawnItems.clearLayers();
+            Object.values(state.geofences).forEach(geofence => {
+                const color = RISK_COLORS[geofence.risk] || 'gray';
+                let popupContent = `<b>Geofence:</b> ${geofence.name || 'Unnamed'}<br>Risk: ${geofence.risk}`;
+                if (geofence.risk_type) {
+                    popupContent += `<br>Risk Type: ${geofence.risk_type}`;
+                }
+                if (geofence.coordinates && typeof geofence.coordinates.lat === 'number' && typeof geofence.radius_m === 'number') {
+                    // This is a radius geofence
+                    popupContent += `<br>Radius: ${geofence.radius_m}m`;
+                    const circle = L.circle([geofence.coordinates.lat, geofence.coordinates.lng], { radius: geofence.radius_m, color: color, fillColor: color, fillOpacity: 0.2 }).addTo(drawnItems);
+                    circle.bindPopup(popupContent);
+                } else if (geofence.coordinates && typeof geofence.coordinates.lat === 'number') {
+                    // This is a point geofence
+                    const marker = L.circleMarker([geofence.coordinates.lat, geofence.coordinates.lng], { radius: 8, color: color, fillColor: color, fillOpacity: 0.8 }).addTo(drawnItems);
+                    marker.bindPopup(popupContent);
+                } else if (Array.isArray(geofence.polygon) && geofence.polygon.length > 0) {
+                    // This is a polygon geofence
+                    const latLngs = geofence.polygon.map(coord => [coord.lat, coord.lng]);
+                    const polygon = L.polygon(latLngs, { color: color, weight: 3, opacity: 0.5, fillOpacity: 0.2 }).addTo(drawnItems);
+                    polygon.bindPopup(popupContent);
+                }
+            });
+        }
+
+        function updateCriticalBanner() {
+            const criticalAlert = state.activeAlerts.find(a => a.status === 'active');
+            const banner = document.getElementById('critical-alert-banner');
+            if (criticalAlert) {
+                const touristName = criticalAlert.touristName || state.tourists[criticalAlert.touristId]?.name || criticalAlert.touristId;
+                document.getElementById('critical-banner-text').textContent = `${criticalAlert.title} for ${touristName}`;
+                banner.dataset.alertId = criticalAlert.id;
+                banner.classList.remove('hidden');
+                if (state.alertVisuals[criticalAlert.id]) map.panTo(state.alertVisuals[criticalAlert.id].marker.getLatLng());
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function updateDashboard() {
+            renderAlertsFeed();
+            renderMapVisuals();
+            renderTouristTable();
+            updateCriticalBanner();
+            document.getElementById('total-tourists-count').textContent = Object.keys(state.tourists).length;
+            document.getElementById('active-alerts-count').textContent = state.activeAlerts.length;
+        }
+
+        // --- UI & EVENT HANDLERS ---
+        function showActionModal(config) {
+            const modal = document.getElementById('action-modal');
+            const input = document.getElementById('action-modal-input');
+            const display = document.getElementById('action-modal-display');
+            const confirmBtn = document.getElementById('action-modal-confirm');
+            document.getElementById('action-modal-title').textContent = config.title;
+            document.getElementById('action-modal-prompt').textContent = config.prompt;
+            if (config.showInput) { input.value = ''; input.classList.remove('hidden'); } else { input.classList.add('hidden'); }
+            if (config.displayContent) { display.innerHTML = config.displayContent; display.classList.remove('hidden'); } else { display.classList.add('hidden'); }
+            confirmBtn.className = `px-4 py-2 rounded-md font-semibold text-white ${config.confirmClass || 'bg-blue-600 hover:bg-blue-700'} transition`;
+            confirmBtn.textContent = config.confirmText || 'Confirm';
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            newConfirmBtn.addEventListener('click', () => { config.onConfirm(input.value); modal.classList.add('hidden'); });
+            modal.classList.remove('hidden');
+        }
+
+        function initEventListeners() {
+            const acknowledgeUpdates = { status: 'acknowledged', responseStatus: 'Help on the way', acknowledgedTimestamp: serverTimestamp() };
+
+            let drawControl = null;
+
+            document.getElementById('draw-geofence-btn').addEventListener('click', () => {
+                if (drawControl === null) {
+                    drawControl = new L.Control.Draw({
+                        position: 'topleft',
+                        edit: { featureGroup: drawnItems },
+                        draw: {
+                            polygon: { shapeOptions: { color: 'blue' } },
+                            polyline: false,
+                            rectangle: false,
+                            circle: { shapeOptions: { color: 'blue' } },
+                            marker: true,
+                            circlemarker: false
+                        }
+                    });
+                    map.addControl(drawControl);
+                    document.getElementById('draw-geofence-btn').innerHTML = `<i class="fas fa-times w-6 mr-2"></i>Close Tools`;
+
+                    map.on(L.Draw.Event.CREATED, function (event) {
+                        const layer = event.layer;
+                        state.drawingType = event.layerType;
+                        if (state.drawingType === 'marker') {
+                            state.drawingLatLngs = { lat: layer.getLatLng().lat, lng: layer.getLatLng().lng };
+                        } else if (state.drawingType === 'polygon') {
+                            state.drawingLatLngs = layer.getLatLngs()[0].map(ll => ({ lat: ll.lat, lng: ll.lng }));
+                        } else if (state.drawingType === 'circle') {
+                            state.drawingLatLngs = { lat: layer.getLatLng().lat, lng: layer.getLatLng().lng, radius_m: layer.getRadius() };
+                        }
+                        drawnItems.addLayer(layer);
+                        document.getElementById('geofence-modal').classList.remove('hidden');
+                    });
+                } else {
+                    map.removeControl(drawControl);
+                    drawControl = null;
+                    document.getElementById('draw-geofence-btn').innerHTML = `<i class="fas fa-draw-polygon w-6 mr-2"></i>Geofence Tools`;
+                }
+            });
+
+            document.getElementById('acknowledge-banner-btn').addEventListener('click', (e) => {
+                const alertId = e.currentTarget.closest('#critical-alert-banner').dataset.alertId;
+                if (alertId) updateAlert(alertId, acknowledgeUpdates);
+            });
+
+            document.getElementById('alerts-feed').addEventListener('click', (e) => {
+                const button = e.target.closest('button');
+                if (button?.dataset.id) {
+                    if (button.classList.contains('acknowledge-btn')) updateAlert(button.dataset.id, acknowledgeUpdates);
+                    else if (button.classList.contains('resolve-btn')) updateAlert(button.dataset.id, { status: 'resolved' });
+                } else {
+                    const card = e.target.closest('[data-alert-id]');
+                    const visual = card ? state.alertVisuals[card.dataset.alertId] : null;
+                    if (visual?.marker) { map.panTo(visual.marker.getLatLng()); visual.marker.openPopup(); }
+                }
+            });
+
+            document.getElementById('tourist-table-body').addEventListener('click', (e) => {
+                const button = e.target.closest('button');
+                if (!button) return;
+                const touristId = button.dataset.id;
+                const tourist = state.tourists[touristId] || { id: touristId, name: document.querySelector(`[data-id="${touristId}"]`).closest('tr').cells[0].firstChild.textContent };
+                if (button.classList.contains('view-btn')) {
+                    document.getElementById('tourist-modal-name').textContent = tourist.name;
+                    document.getElementById('tourist-modal-origin').textContent = tourist.origin || 'Details not yet synced.';
+                    document.getElementById('tourist-modal-id').textContent = `ID: ${tourist.id}`;
+                    document.getElementById('tourist-modal-location').textContent = `Last known from alert.`;
+                    document.getElementById('tourist-modal-status').textContent = 'EMERGENCY';
+                    fetchAlertHistory(tourist.id);
+                    document.getElementById('tourist-modal').classList.remove('hidden');
+                } else if (button.classList.contains('locate-btn')) {
+                    const alertForTourist = state.activeAlerts.find(a => a.touristId === touristId);
+                    if (alertForTourist?.lat && alertForTourist?.lng) {
+                        map.setView([alertForTourist.lat, alertForTourist.lng], 16);
+                        state.alertVisuals[alertForTourist.id]?.marker.openPopup();
+                    } else { alert('Location data not available.'); }
+                } else if (button.classList.contains('message-btn')) {
+                    showActionModal({ title: `Message ${tourist.name}`, prompt: 'Enter message:', showInput: true, confirmText: 'Send', onConfirm: (msg) => { if (msg) console.log(`MESSAGE to ${tourist.name}: ${msg}`); } });
+                }
+            });
+
+            document.querySelectorAll('.quick-action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const action = e.currentTarget.dataset.action;
+                    if (action === 'broadcast') {
+                        showActionModal({ title: 'Emergency Broadcast', prompt: 'This message will be sent to ALL registered tourists.', showInput: true, confirmText: 'Broadcast', confirmClass: 'bg-red-600', onConfirm: (msg) => { if (msg) console.log(`BROADCAST: ${msg}`); } });
+                    } else if (action === 'safety-alert') {
+                        showActionModal({ title: 'Send Safety Alert', prompt: 'Enter a general safety alert.', showInput: true, confirmText: 'Send Alert', onConfirm: (msg) => { if (msg) console.log(`SAFETY ALERT: ${msg}`); } });
+                    } else if (action === 'report') {
+                        const report = `HawkEye System Report - ${new Date().toLocaleString()}\n- Total Tourists: ${Object.keys(state.tourists).length}\n- Active Alerts: ${state.activeAlerts.length}`;
+                        showActionModal({ title: 'System Report', prompt: 'Summary of current system status:', showInput: false, displayContent: report, confirmText: 'Close', onConfirm: () => { } });
+                    }
+                });
+            });
+
+            document.getElementById('geofence-file-upload').addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    try {
+                        const geofences = JSON.parse(e.target.result);
+                        if (Array.isArray(geofences)) {
+                            let newGeofences = [];
+                            geofences.forEach(geofence => {
+                                // Check for point geofences with radius and risk_level
+                                if (geofence.name && geofence.risk_level && typeof geofence.lat === 'number' && typeof geofence.lon === 'number' && typeof geofence.radius_m === 'number') {
+                                    newGeofences.push({ name: geofence.name, coordinates: { lat: geofence.lat, lng: geofence.lon }, radius_m: geofence.radius_m, risk: geofence.risk_level.toLowerCase(), risk_type: geofence.risk_type });
+                                }
+                                // Check for point geofences without radius
+                                else if (geofence.name && geofence.risk && geofence.coordinates && typeof geofence.coordinates.lat === 'number') {
+                                    newGeofences.push({ name: geofence.name, coordinates: geofence.coordinates, risk: geofence.risk.toLowerCase() });
+                                }
+                                // Check for polygon geofences
+                                else if (geofence.name && geofence.risk && Array.isArray(geofence.polygon)) {
+                                    const polygonCoords = geofence.polygon.map(coord => ({ lat: coord.lat, lng: coord.lng }));
+                                    newGeofences.push({ name: geofence.name, polygon: polygonCoords, risk: geofence.risk.toLowerCase() });
+                                }
+                            });
+                            Promise.all(newGeofences.map(geofence => saveGeofence(geofence))).then(() => {
+                                alert("Geofences from file uploaded successfully.");
+                            });
+                        } else {
+                            alert("Invalid file format. Please upload a JSON array of geofence objects.");
+                        }
+                    } catch (err) {
+                        alert("Error parsing file. Please ensure it is a valid JSON file.");
+                        console.error("File parse error:", err);
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            document.getElementById('geofence-save-btn').addEventListener('click', () => {
+                const name = document.getElementById('geofence-name').value;
+                const risk = document.getElementById('geofence-risk').value;
+                if (state.drawingLatLngs && name) {
+                    const geofenceData = {
+                        name: name,
+                        risk: risk
+                    };
+                    if (state.drawingType === 'marker') {
+                        geofenceData.coordinates = state.drawingLatLngs;
+                    } else if (state.drawingType === 'polygon') {
+                        geofenceData.polygon = state.drawingLatLngs;
+                    } else if (state.drawingType === 'circle') {
+                        geofenceData.coordinates = { lat: state.drawingLatLngs.lat, lng: state.drawingLatLngs.lng };
+                        geofenceData.radius_m = state.drawingLatLngs.radius_m;
+                    }
+                    saveGeofence(geofenceData);
+                    document.getElementById('geofence-modal').classList.add('hidden');
+                    state.drawingLatLngs = null;
+                    state.drawingType = null;
+                } else {
+                    alert('Please provide a name and draw a geofence.');
+                }
+            });
+
+            document.getElementById('geofence-cancel-btn').addEventListener('click', () => {
+                document.getElementById('geofence-modal').classList.add('hidden');
+                state.drawingLatLngs = null;
+                state.drawingType = null;
+                // Clear the last drawn layer
+                drawnItems.clearLayers();
+            });
+            document.getElementById('close-geofence-modal').addEventListener('click', () => {
+                document.getElementById('geofence-modal').classList.add('hidden');
+                state.drawingLatLngs = null;
+                state.drawingType = null;
+                // Clear the last drawn layer
+                drawnItems.clearLayers();
+            });
+
+            document.getElementById('close-tourist-modal').addEventListener('click', () => document.getElementById('tourist-modal').classList.add('hidden'));
+            document.getElementById('close-action-modal').addEventListener('click', () => document.getElementById('action-modal').classList.add('hidden'));
+            document.getElementById('action-modal-cancel').addEventListener('click', () => document.getElementById('action-modal').classList.add('hidden'));
+        }
+
+        function initFirebaseListeners() {
+            onSnapshot(query(collection(db, "touristData")), (snapshot) => {
+                let needsUpdate = false;
+                snapshot.docChanges().forEach((change) => {
+                    needsUpdate = true;
+                    const touristData = { id: change.doc.id, ...change.doc.data() };
+                    if (change.type === "added" || change.type === "modified") state.tourists[change.doc.id] = touristData;
+                    if (change.type === "removed") delete state.tourists[change.doc.id];
+                });
+                if (needsUpdate) updateDashboard();
+            });
+
+            const alertsQuery = query(collection(db, "alerts"), where("status", "in", ["active", "acknowledged"]));
+            onSnapshot(alertsQuery, (snapshot) => {
+                const sound = document.getElementById('alert-sound');
+                const newAlerts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const newCriticalAlert = newAlerts.find(alert => alert.status === 'active' && !state.knownCriticalAlertIds.has(alert.id));
+                if (newCriticalAlert) {
+                    sound.play().catch(e => console.warn("Audio play prevented by browser.", e));
+                }
+                state.knownCriticalAlertIds.clear();
+                newAlerts.forEach(alert => { if (alert.status === 'active') state.knownCriticalAlertIds.add(alert.id); });
+                state.activeAlerts = newAlerts;
+                updateDashboard();
+            });
+
+            onSnapshot(query(collection(db, "geofences")), (snapshot) => {
+                let needsUpdate = false;
+                snapshot.docChanges().forEach((change) => {
+                    needsUpdate = true;
+                    const geofenceData = { id: change.doc.id, ...change.doc.data() };
+                    if (change.type === "added" || change.type === "modified") state.geofences[change.doc.id] = geofenceData;
+                    if (change.type === "removed") delete state.geofences[change.doc.id];
+                });
+                if (needsUpdate) renderGeofences();
+            });
+        }
+
+        function initMap() {
+            map.setView([21.2514, 81.6296], 10); // Centered on Raipur
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+            map.addLayer(drawnItems);
+        }
+
+        // --- APPLICATION START ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            initEventListeners();
+            initFirebaseListeners();
+
+            // Calculate analytics on load and then every 30 seconds
+            calculateAndDisplayAnalytics();
+            setInterval(calculateAndDisplayAnalytics, 30000);
+        });
+    </script>
+</body>
+
+</html>
